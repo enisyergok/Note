@@ -1,0 +1,43 @@
+
+name: REA Goodnotes Analysis
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    if: github.event.repository.private == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install REA
+        run: npm install -g rea-agents@latest
+
+      - name: Download and inspect Goodnotes IPA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p input report
+          gh release download V1 --repo "$GITHUB_REPOSITORY" --pattern '*.ipa' --dir input
+          IPA=$(find input -type f -iname '*.ipa' -print -quit)
+          test -n "$IPA"
+          sha256sum "$IPA" > report/sha256.txt
+          unzip -t "$IPA" > report/zip-test.txt 2>&1 || true
+          rea inspect-artifact "$IPA" --json > report/rea-analysis.json 2>report/rea-errors.txt || true
+
+      - name: Upload REA report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: goodnotes-rea-report
+          path: report/
+          if-no-files-found: warn
